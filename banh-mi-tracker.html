@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sổ bánh mì</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;800&display=swap">
+<style>
+:root{--bg:#eef2ec;--card:#fff;--ink:#1d2a23;--mute:#5f6f66;--line:#d5ddd3;--green:#2c6b4e;--gold:#d79b14;--red:#c0392b;--r:10px}
+@media(prefers-color-scheme:dark){:root{--bg:#141b17;--card:#1d2722;--ink:#e8efe9;--mute:#9baba1;--line:#33423a;--green:#5fb88c;--gold:#e8b23a;--red:#e8705f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Be Vietnam Pro",system-ui,sans-serif}
+header{padding:18px 16px 8px;max-width:860px;margin:auto}
+h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.5px}
+.sub{color:var(--mute);font-size:13px}
+nav{display:flex;gap:6px;overflow-x:auto;padding:8px 16px;max-width:860px;margin:auto;position:sticky;top:0;background:var(--bg);z-index:5}
+nav button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:99px;font:inherit;cursor:pointer}
+nav button.on{background:var(--green);color:#fff;border-color:var(--green)}
+nav button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+main{max-width:860px;margin:auto;padding:8px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
+.card h3{margin:0 0 8px;font-size:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row>*{flex:1 1 110px}
+label{display:block;font-size:12px;color:var(--mute);margin-bottom:2px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+button.p{background:var(--green);color:#fff;border:0;padding:10px 16px;border-radius:8px;font:inherit;font-weight:700;cursor:pointer}
+button.s{background:transparent;color:var(--green);border:1px solid var(--green);padding:8px 12px;border-radius:8px;font:inherit;cursor:pointer}
+button.x{background:none;border:0;color:var(--red);cursor:pointer;font-size:18px;flex:0 0 auto}
+.big{font-size:30px;font-weight:800;letter-spacing:-1px}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpis .card{margin:0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:500;color:var(--mute);font-size:12px}
+.bar{height:12px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--green)}
+.msg{font-size:13px;color:var(--mute);margin-top:6px}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;background:var(--gold);color:#1d2a23;font-size:12px;font-weight:700}
+@media(prefers-reduced-motion:no-preference){.bar>i{transition:width .4s}}
+</style>
+</head>
+<body>
+<header><h1>Sổ bánh mì</h1><div class="sub" id="hdr"></div></header>
+<nav id="nav"></nav>
+<main id="app"></main>
+<script>
+const K='banhmi_v1';
+const C=[['bm','Bánh mì'],['bo','Bơ'],['pate','Pate'],['thit','Thịt'],['cha','Chả'],['chan','Chả nguội'],['rau','Rau'],['khac','Khác']];
+const CATS=['Nắng','Nắng nóng','Âm u','Mưa'];
+const TABS=[['in','Nhập liệu'],['ov','Tổng quan'],['cap','Vốn'],['fc','Dự báo'],['st','Cài đặt']];
+let S;
+try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+S=S||{};
+S.settings=Object.assign({points:['Điểm 1','Điểm 2','Điểm 3'],p1:13000,p2:10000,fixed:[{n:'Tủ bánh mì',a:0},{n:'Dụng cụ bán bánh mì',a:0}],lat:13.96,lng:108.99},S.settings||{});
+S.entries=S.entries||{};S.weather=S.weather||{};
+let tab='in',date=iso(new Date()),WX=null,range=30;
+function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert('Không lưu được dữ liệu trên trình duyệt này.')}}
+function iso(d){return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)}
+function addDays(s,n){const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return iso(d)}
+const fmt=n=>Math.round(n).toLocaleString('vi-VN')+'đ';
+const num=v=>Number(v)||0;
+const P=()=>S.settings.points;
+const costOf=e=>C.reduce((s,[k])=>s+num(e.c&&e.c[k]),0);
+const revOf=e=>num(e.q1)*S.settings.p1+num(e.q2)*S.settings.p2;
+const qOf=e=>num(e.q1)+num(e.q2);
+const getE=(d,i)=>S.entries[d+'|'+i]||{q1:'',q2:'',c:{},note:''};
+function days(){const m={};for(const k in S.entries){const[d,i]=k.split('|');(m[d]=m[d]||{})[i]=S.entries[k]}return m}
+function dayStat(d){const m=days()[d]||{};let r=0,c=0,q=0;for(const i in m){r+=revOf(m[i]);c+=costOf(m[i]);q+=qOf(m[i])}return{r,c,q,p:r-c}}
+function wdesc(code){if(code==null)return'';if(code<=1)return'Trời quang';if(code==2)return'Ít mây';if(code==3)return'Nhiều mây';if(code<=48)return'Sương mù';if(code<=67)return'Mưa';if(code<=77)return'Tuyết';if(code<=82)return'Mưa rào';return'Dông'}
+function catOf(w){if(!w)return null;if(w.cat)return w.cat;return null}
+function autoCat(code,tmax,rain){if(rain>=1||code>=51)return'Mưa';if(code<=2)return tmax>=34?'Nắng nóng':'Nắng';return'Âm u'}
+async function loadWX(){
+ if(WX)return WX;
+ const{lat,lng}=S.settings;
+ const u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&past_days=60&forecast_days=7`;
+ const r=await fetch(u);if(!r.ok)throw new Error('http '+r.status);
+ const j=(await r.json()).daily,m={};
+ j.time.forEach((t,i)=>{const code=j.weathercode[i],tx=j.temperature_2m_max[i],rain=j.precipitation_sum[i];
+  m[t]={code,tmax:Math.round(tx),tmin:Math.round(j.temperature_2m_min[i]),rain,cat:autoCat(code,tx,rain),desc:wdesc(code)}});
+ return WX=m}
+async function fetchW(){
+ const el=document.getElementById('wmsg');el.textContent='Đang lấy thời tiết...';
+ try{const m=await loadWX(),w=m[date];if(!w){el.textContent='API chưa có dữ liệu ngày này, hãy chọn tay.';return}
+  document.getElementById('wcat').value=w.cat;document.getElementById('wtmax').value=w.tmax;
+  el.textContent=`${w.desc}, ${w.tmin}–${w.tmax}°C, mưa ${w.rain}mm. Bấm "Lưu ngày này" để ghi lại.`;
+ }catch(e){el.textContent='Không lấy được thời tiết (cần mở file bằng trình duyệt và có mạng). Bạn có thể chọn tay.'}}
+
+/* ---- dự báo ---- */
+const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:0;
+function series(pi){const m=days(),out=[];
+ Object.keys(m).sort().forEach(d=>{let q=0,has=false;
+  for(const i in m[d]){if(pi<0||+i===pi){q+=qOf(m[d][i]);has=true}}
+  if(has)out.push({d,q,cat:catOf(S.weather[d]),dow:new Date(d+'T12:00:00').getDay()})});return out}
+function predict(pi,d,cat){
+ const h=series(pi).filter(x=>x.d<d);if(!h.length)return null;
+ const rec=h.slice(-14),M=mean(rec.map(x=>x.q)),all=mean(h.map(x=>x.q));
+ let base=M;const same=h.filter(x=>cat&&x.cat===cat);
+ if(same.length>=3)base=.6*mean(same.map(x=>x.q))+.4*M;
+ else if(same.length>0&&all>0)base=M*(.5+.5*mean(same.map(x=>x.q))/all);
+ const dow=new Date(d+'T12:00:00').getDay(),sd=h.filter(x=>x.dow===dow);
+ if(sd.length>=2&&all>0)base*=Math.min(1.15,Math.max(.85,mean(sd.map(x=>x.q))/all));
+ const sdev=Math.sqrt(mean(rec.map(x=>(x.q-M)**2)));
+ return{v:Math.round(base),lo:Math.max(0,Math.round(base-sdev)),hi:Math.round(base+sdev),n:h.length,same:same.length}}
+const conf=n=>n<7?'thấp':n<21?'vừa':'khá';
+
+/* ---- giao diện ---- */
+function nav(){document.getElementById('nav').innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${l}</button>`).join('')}
+function go(t){tab=t;render()}
+function render(){nav();const t=dayStat(iso(new Date()));
+ document.getElementById('hdr').innerHTML=`Hôm nay: <b class="${t.p>=0?'pos':'neg'}">${fmt(t.p)}</b> lợi nhuận · ${t.q} ổ`;
+ document.getElementById('app').innerHTML=({in:vIn,ov:vOv,cap:vCap,fc:vFc,st:vSt})[tab]()}
+
+function vIn(){
+ const w=S.weather[date]||{};
+ const pts=P().map((n,i)=>{const e=getE(date,i);
+  return`<div class="card"><h3>${esc(n)}</h3>
+  <div class="row"><div><label>Số ổ giá ${S.settings.p1.toLocaleString('vi-VN')}đ</label><input id="q1_${i}" type="number" inputmode="numeric" min="0" value="${e.q1}"></div>
+  <div><label>Số ổ giá ${S.settings.p2.toLocaleString('vi-VN')}đ</label><input id="q2_${i}" type="number" inputmode="numeric" min="0" value="${e.q2}"></div></div>
+  <div class="row" style="margin-top:8px">${C.map(([k,l])=>`<div><label>${l} (đ)</label><input id="c_${k}_${i}" type="number" inputmode="numeric" min="0" value="${(e.c&&e.c[k])||''}"></div>`).join('')}</div>
+  <div style="margin-top:8px"><label>Ghi chú</label><input id="n_${i}" value="${esc(e.note||'')}" placeholder="Hết hàng sớm, lễ, sự kiện..."></div></div>`}).join('');
+ return`<div class="card"><div class="row"><div><label>Ngày</label><input type="date" id="dt" value="${date}" onchange="date=this.value;render()"></div>
+ <div><label>Thời tiết</label><select id="wcat"><option value="">Chưa chọn</option>${CATS.map(c=>`<option ${w.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+ <div><label>Nhiệt độ cao nhất (°C)</label><input id="wtmax" type="number" value="${w.tmax??''}"></div>
+ <div style="flex:0 0 auto"><button class="s" onclick="fetchW()">Lấy từ API</button></div></div>
+ <div class="msg" id="wmsg">${w.desc?esc(w.desc):''}</div></div>${pts}
+ <button class="p" onclick="saveDay()">Lưu ngày này</button> <span class="msg" id="smsg"></span>`}
+function saveDay(){
+ P().forEach((_,i)=>{const e={q1:val('q1_'+i),q2:val('q2_'+i),c:{},note:document.getElementById('n_'+i).value.trim()};
+  C.forEach(([k])=>{const v=val(`c_${k}_${i}`);if(v)e.c[k]=v});
+  const any=num(e.q1)||num(e.q2)||costOf(e)||e.note,key=date+'|'+i;
+  if(any)S.entries[key]=e;else delete S.entries[key]});
+ const cat=document.getElementById('wcat').value;
+ if(cat){const old=S.weather[date]||{};S.weather[date]=Object.assign(old,{cat,tmax:num(val('wtmax'))||old.tmax,desc:(WX&&WX[date]&&WX[date].desc)||old.desc||''})}
+ save();render();const s=document.getElementById('smsg');if(s)s.textContent='Đã lưu.'}
+const val=id=>{const v=document.getElementById(id).value;return v===''?'':num(v)};
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function range_ds(){const all=Object.keys(days()).sort();return range?all.filter(d=>d>=addDays(iso(new Date()),-range+1)):all}
+function vOv(){
+ const ds=range_ds();let R=0,Cc=0,Q=0;const per=P().map(()=>({r:0,c:0,q:0}));
+ ds.forEach(d=>{const m=days()[d];for(const i in m){const r=revOf(m[i]),c=costOf(m[i]),q=qOf(m[i]);per[i].r+=r;per[i].c+=c;per[i].q+=q;R+=r;Cc+=c;Q+=q}});
+ const prof=ds.map(d=>dayStat(d).p),mx=Math.max(1,...prof.map(Math.abs));
+ const bw=Math.max(4,Math.min(30,560/Math.max(1,ds.length)-3));
+ const chart=ds.length?`<svg viewBox="0 0 600 150" width="100%" role="img" aria-label="Lợi nhuận theo ngày"><line x1="0" x2="600" y1="75" y2="75" stroke="var(--line)"/>${prof.map((p,i)=>{const h=Math.abs(p)/mx*70;return`<rect x="${20+i*(bw+3)}" y="${p>=0?75-h:75}" width="${bw}" height="${Math.max(1,h)}" fill="${p>=0?'var(--green)':'var(--red)'}"><title>${ds[i]}: ${fmt(p)}</title></rect>`}).join('')}</svg>`:'<div class="msg">Chưa có dữ liệu. Hãy nhập ngày đầu tiên ở tab Nhập liệu.</div>';
+ return`<div class="card"><label>Khoảng thời gian</label><select onchange="range=+this.value;render()">${[[7,'7 ngày gần nhất'],[30,'30 ngày gần nhất'],[90,'90 ngày gần nhất'],[0,'Tất cả']].map(([v,l])=>`<option value="${v}" ${v===range?'selected':''}>${l}</option>`).join('')}</select></div>
+ <div class="kpis"><div class="card"><div class="sub">Doanh thu</div><div class="big">${fmt(R)}</div></div><div class="card"><div class="sub">Chi phí</div><div class="big">${fmt(Cc)}</div></div>
+ <div class="card"><div class="sub">Lợi nhuận</div><div class="big ${R-Cc>=0?'pos':'neg'}">${fmt(R-Cc)}</div></div><div class="card"><div class="sub">Số ổ bán</div><div class="big">${Q.toLocaleString('vi-VN')}</div></div></div>
+ <div class="card"><h3>Lợi nhuận theo ngày</h3>${chart}</div>
+ <div class="card"><h3>So sánh các điểm bán</h3><table><tr><th>Điểm</th><th>Số ổ</th><th>Doanh thu</th><th>Chi phí</th><th>Lợi nhuận</th></tr>${per.map((x,i)=>`<tr><td>${esc(P()[i])}</td><td>${x.q}</td><td>${fmt(x.r)}</td><td>${fmt(x.c)}</td><td class="${x.r-x.c>=0?'pos':'neg'}">${fmt(x.r-x.c)}</td></tr>`).join('')}</table></div>
+ <button class="s" onclick="exportCSV()">Xuất CSV</button>`}
+
+function vCap(){
+ const cap=S.settings.fixed.reduce((s,f)=>s+num(f.a),0),ds=Object.keys(days()).sort(),last=ds.slice(-30);
+ const tot=ds.reduce((s,d)=>s+dayStat(d).p,0),avg=last.length?mean(last.map(d=>dayStat(d).p)):0;
+ const left=Math.max(0,cap-tot),pct=cap?Math.min(100,Math.max(0,tot/cap*100)):0;
+ let pay=!cap?'Chưa nhập vốn (vào Cài đặt)':left===0?'Đã hoàn vốn':avg>0?`${Math.ceil(left/avg)} ngày nữa (~${(left/avg/30).toFixed(1)} tháng)`:'Chưa có lãi để tính';
+ return`<div class="kpis"><div class="card"><div class="sub">Tổng vốn cố định</div><div class="big">${fmt(cap)}</div></div>
+ <div class="card"><div class="sub">Lợi nhuận tích lũy</div><div class="big ${tot>=0?'pos':'neg'}">${fmt(tot)}</div></div>
+ <div class="card"><div class="sub">Lợi nhuận TB/ngày (30 ngày)</div><div class="big">${fmt(avg)}</div></div>
+ <div class="card"><div class="sub">Lợi nhuận trên vốn (ROI)</div><div class="big ${tot>=0?'pos':'neg'}">${cap?(tot/cap*100).toFixed(1)+'%':'–'}</div></div></div>
+ <div class="card"><h3>Thu hồi vốn</h3><div class="bar"><i style="width:${pct}%"></i></div>
+ <p><b>${pct.toFixed(0)}%</b> vốn đã về · còn thiếu ${fmt(left)}</p><p>Dự kiến hoàn vốn: <b>${pay}</b></p>
+ <div class="msg">Lợi nhuận ngày = doanh thu − chi phí nguyên liệu hằng ngày. Ngày hoàn vốn = vốn còn thiếu ÷ lợi nhuận TB/ngày.${cap&&avg>0?` Nếu giữ mức này, lợi nhuận/tháng ≈ ${fmt(avg*30)} (${(avg*30/cap*100).toFixed(1)}% vốn/tháng).`:''}</div></div>`}
+
+function vFc(){
+ return`<div class="card"><div class="msg" id="fmsg">Đang lấy dự báo thời tiết...</div></div><div id="fbox"></div>`}
+async function fcLoad(){
+ let m;const msg=document.getElementById('fmsg');
+ try{m=await loadWX()}catch(e){msg.textContent='Không lấy được thời tiết (cần mạng, mở file bằng trình duyệt). Dự báo dưới đây dùng thời tiết bạn chọn tay: chọn ở ô bên dưới.';m={}}
+ const base=iso(new Date());let html='';
+ for(let k=1;k<=3;k++){const d=addDays(base,k),w=m[d],cat=w?w.cat:'';
+  const rows=P().map((n,i)=>[n,predict(i,d,cat)]);
+  const tot=rows.reduce((s,[,p])=>s+(p?p.v:0),0),nn=Math.max(0,...rows.map(([,p])=>p?p.n:0));
+  html+=`<div class="card"><h3>${k===1?'Ngày mai':'Ngày +'+k} · ${d.split('-').reverse().join('/')} ${w?`<span class="chip">${w.cat}</span>`:''}</h3>
+  <div class="msg">${w?`${w.desc}, ${w.tmin}–${w.tmax}°C, mưa ${w.rain}mm`:'Chưa có thời tiết'}</div>
+  ${nn?`<table><tr><th>Điểm</th><th>Dự báo (ổ)</th><th>Khoảng</th><th>Nên chuẩn bị</th></tr>${rows.map(([n,p])=>p?`<tr><td>${esc(n)}</td><td><b>${p.v}</b></td><td>${p.lo}–${p.hi}</td><td>${Math.ceil(p.v*1.1)}</td></tr>`:`<tr><td>${esc(n)}</td><td colspan="3">chưa đủ dữ liệu</td></tr>`).join('')}
+  <tr><td><b>Tổng</b></td><td><b>${tot}</b></td><td></td><td>${Math.ceil(tot*1.1)}</td></tr></table>
+  <div class="msg">Độ tin cậy: ${conf(nn)} (${nn} ngày dữ liệu; ${Math.max(...rows.map(([,p])=>p?p.same:0))} ngày cùng loại thời tiết). "Nên chuẩn bị" = dự báo + 10% dự phòng.</div>`:'<div class="msg">Chưa có lịch sử bán. Hãy nhập số liệu vài ngày để có dự báo.</div>'}</div>`}
+ document.getElementById('fbox').innerHTML=html;
+ if(m[addDays(base,1)])msg.textContent='Dự báo thời tiết lấy từ Open-Meteo theo toạ độ trong Cài đặt.'}
+
+function vSt(){
+ const s=S.settings;
+ return`<div class="card"><h3>Điểm bán và giá</h3><div class="row">${s.points.map((n,i)=>`<div><label>Tên điểm ${i+1}</label><input value="${esc(n)}" onchange="S.settings.points[${i}]=this.value;save()"></div>`).join('')}</div>
+ <div class="row" style="margin-top:8px"><div><label>Giá bán loại 1 (đ)</label><input type="number" value="${s.p1}" onchange="S.settings.p1=num(this.value);save()"></div><div><label>Giá bán loại 2 (đ)</label><input type="number" value="${s.p2}" onchange="S.settings.p2=num(this.value);save()"></div></div></div>
+ <div class="card"><h3>Chi phí cố định (vốn đầu tư)</h3>${s.fixed.map((f,i)=>`<div class="row" style="margin-bottom:6px"><div><input value="${esc(f.n)}" onchange="S.settings.fixed[${i}].n=this.value;save()"></div><div><input type="number" value="${f.a||''}" placeholder="Số tiền (đ)" onchange="S.settings.fixed[${i}].a=num(this.value);save()"></div><button class="x" aria-label="Xoá" onclick="S.settings.fixed.splice(${i},1);save();render()">×</button></div>`).join('')}
+ <button class="s" onclick="S.settings.fixed.push({n:'Khoản mới',a:0});save();render()">Thêm khoản</button></div>
+ <div class="card"><h3>Vị trí để lấy thời tiết</h3><div class="row"><div><label>Vĩ độ</label><input type="number" step="0.01" value="${s.lat}" onchange="S.settings.lat=num(this.value);WX=null;save()"></div><div><label>Kinh độ</label><input type="number" step="0.01" value="${s.lng}" onchange="S.settings.lng=num(this.value);WX=null;save()"></div></div></div>
+ <div class="card"><h3>Sao lưu</h3><div class="row"><button class="s" onclick="exportJSON()">Tải bản sao lưu (JSON)</button><div><input type="file" accept=".json" onchange="importJSON(this.files[0])"></div></div>
+ <div class="msg">Dữ liệu lưu trong trình duyệt của máy này. Hãy sao lưu định kỳ, và dùng cùng một trình duyệt để mở file này mỗi ngày.</div></div>`}
+
+function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
+function exportJSON(){dl('banhmi-backup-'+iso(new Date())+'.json',JSON.stringify(S),'application/json')}
+function importJSON(f){if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.entries)throw 0;if(!confirm('Ghi đè dữ liệu hiện tại bằng bản sao lưu này?'))return;S=j;save();location.reload()}catch(e){alert('File không hợp lệ.')}};r.readAsText(f)}
+function exportCSV(){const rows=[['Ngày','Điểm','Thời tiết','Ổ giá 1','Ổ giá 2','Doanh thu','Chi phí','Lợi nhuận','Ghi chú']];
+ Object.keys(S.entries).sort().forEach(k=>{const[d,i]=k.split('|'),e=S.entries[k];rows.push([d,P()[i],catOf(S.weather[d])||'',num(e.q1),num(e.q2),revOf(e),costOf(e),revOf(e)-costOf(e),'"'+(e.note||'').replace(/"/g,'""')+'"'])});
+ dl('banhmi.csv','\ufeff'+rows.map(r=>r.join(',')).join('\n'),'text/csv')}
+
+const _r=render;render=function(){_r();if(tab==='fc')fcLoad()};
+render();
+</script>
+</body>
+</html>
